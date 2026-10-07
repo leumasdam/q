@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Presmerovanie…</title>
+<style>body{margin:0;min-height:100svh;display:grid;place-items:center;font:16px/1.5 system-ui,sans-serif;background:#f3efe6;color:#181614}a{color:#b3121c}</style>
+<script>
+/* Dynamický QR: QR vedie na /q/<kód>, cieľ sa číta z links.json, takže sa dá kedykoľvek zmeniť bez novej tlače. */
+(function () {
+  var parts = location.pathname.replace(/\/+$/, '').split('/');
+  var code = decodeURIComponent(parts[parts.length - 1] || '').toLowerCase();
+  fetch('/q/links.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (map) {
+      var to = map[code];
+      if (to) { location.replace(to); return; }
+      document.getElementById('msg').innerHTML = 'Kód „' + code + '“ neexistuje.';
+    })
+    .catch(function () { document.getElementById('msg').textContent = 'Presmerovanie sa nepodarilo, skúste znova.'; });
+})();
+</script>
+</head>
+<body><p id="msg">Presmerovávam…</p></body>
+</html>
