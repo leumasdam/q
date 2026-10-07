@@ -15,7 +15,14 @@
     .then(function (r) { return r.json(); })
     .then(function (map) {
       var to = map[code];
-      if (to) { location.replace(to); return; }
+      if (to) {
+        /* štatistika: +1 celkovo a +1 za dnešný deň (Abacus, zadarmo, bez účtu); na odpoveď čakáme max. 600 ms */
+        var NS = 'https://abacus.jasoncameron.dev/hit/leumasdam-q/', day = new Date().toISOString().slice(0, 10);
+        var ping = function (k) { return fetch(NS + encodeURIComponent(k), { keepalive: true, mode: 'cors' }).catch(function () {}); };
+        var go = function () { location.replace(to); };
+        Promise.race([Promise.all([ping(code), ping(code + '.' + day)]), new Promise(function (r) { setTimeout(r, 600); })]).then(go, go);
+        return;
+      }
       document.getElementById('msg').innerHTML = 'Kód „' + code + '“ neexistuje.';
     })
     .catch(function () { document.getElementById('msg').textContent = 'Presmerovanie sa nepodarilo, skúste znova.'; });

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>QR štatistiky</title>
+<style>
+  :root { --bg:#f3efe6; --ink:#181614; --muted:#6b645c; --acc:#b3121c; --line:#e2dbcf; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 60px; }
+  h1 { font-size: 26px; margin: 0 0 4px; } .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .code { font-weight: 700; } .to { color: var(--muted); font-size: 13px; word-break: break-all; }
+  .tot { font-size: 30px; font-weight: 800; color: var(--acc); white-space: nowrap; } .tot small { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .bars { display: grid; grid-template-columns: repeat(30, 1fr); gap: 3px; align-items: end; height: 70px; margin-top: 12px; }
+  .bars i { display: block; background: var(--acc); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .85; }
+  .bars i.z { background: var(--line); }
+  .ax { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .row { display: flex; gap: 18px; font-size: 13px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; } .row b { color: var(--ink); }
+  a { color: var(--acc); }
+</style>
+</head>
+<body>
+<main>
+  <h1>QR štatistiky</h1>
+  <p class="sub">Počet naskenovaní každého QR kódu, celkovo a za posledných 30 dní.</p>
+  <div id="list">Načítavam…</div>
+</main>
+<script>
+const API = 'https://abacus.jasoncameron.dev/get/leumasdam-q/';
+const get = k => fetch(API + encodeURIComponent(k)).then(r => r.ok ? r.json() : { value: 0 }).then(j => j.value || 0).catch(() => 0);
+const days = [...Array(30)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 29 + i); return d.toISOString().slice(0, 10); });
+fetch('links.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(async map => {
+  const list = document.getElementById('list'); list.innerHTML = '';
+  for (const [code, to] of Object.entries(map)) {
+    const card = document.createElement('div'); card.className = 'card'; card.innerHTML = `<div class="top"><div><div class="code">${code}</div><div class="to">→ ${to}</div></div><div class="tot">…</div></div>`; list.appendChild(card);
+    const [total, ...per] = await Promise.all([get(code), ...days.map(d => get(code + '.' + d))]);
+    const max = Math.max(1, ...per), last7 = per.slice(-7).reduce((a, b) => a + b, 0), today = per[per.length - 1];
+    card.querySelector('.tot').innerHTML = `${total} <small>naskenovaní</small>`;
+    card.insertAdjacentHTML('beforeend', `<div class="bars">${per.map((v, i) => `<i class="${v ? '' : 'z'}" style="height:${Math.max(3, v / max * 100)}%" title="${days[i]}: ${v}"></i>`).join('')}</div>
+      <div class="ax"><span>${days[0].slice(5).split('-').reverse().join('.')}.</span><span>dnes</span></div>
+      <div class="row"><span>Dnes: <b>${today}</b></span><span>Posledných 7 dní: <b>${last7}</b></span><span>Posledných 30 dní: <b>${per.reduce((a, b) => a + b, 0)}</b></span><span><a href="qr/${code}.png" download>Stiahnuť QR</a></span></div>`);
+  }
+});
+</script>
+</body>
+</html>
