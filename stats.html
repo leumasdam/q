@@ -30,19 +30,42 @@
   <div id="list">Načítavam…</div>
 </main>
 <script>
-const API = 'https://abacus.jasoncameron.dev/get/leumasdam-q/';
-const get = k => fetch(API + encodeURIComponent(k)).then(r => r.ok ? r.json() : { value: 0 }).then(j => j.value || 0).catch(() => 0);
-const days = [...Array(30)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 29 + i); return d.toISOString().slice(0, 10); });
+/* Počítadlo má limit dotazov, preto ide všetko postupne (s čakaním pri limite) a uzavreté dni sa pamätajú v prehliadači. */
+const API = 'https://abacus.jasoncameron.dev/get/leumasdam-q/', N = 14;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const cache = (() => { try { return JSON.parse(localStorage.getItem('qstats') || '{}'); } catch (e) { return {}; } })();
+const save = () => { try { localStorage.setItem('qstats', JSON.stringify(cache)); } catch (e) {} };
+const today = new Date().toISOString().slice(0, 10);
+async function get(k, final) {
+  if (final && k in cache) return cache[k];
+  for (let tries = 0; tries < 6; tries++) {
+    const r = await fetch(API + encodeURIComponent(k)).catch(() => null);
+    if (r && r.status === 429) { const t = await r.json().catch(() => ({})); const s = parseFloat((t.error || '').match(/([\d.]+)s/)?.[1] || '3'); await sleep(s * 1000 + 300); continue; }
+    const v = r && r.ok ? ((await r.json()).value || 0) : 0;
+    if (final) { cache[k] = v; save(); }
+    await sleep(160);
+    return v;
+  }
+  return 0;
+}
+const days = [...Array(N)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - (N - 1) + i); return d.toISOString().slice(0, 10); });
+document.querySelector('.sub').textContent = `Počet naskenovaní každého QR kódu, celkovo a za posledných ${N} dní.`;
 fetch('links.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(async map => {
   const list = document.getElementById('list'); list.innerHTML = '';
-  for (const [code, to] of Object.entries(map)) {
-    const card = document.createElement('div'); card.className = 'card'; card.innerHTML = `<div class="top"><div><div class="code">${code}</div><div class="to">→ ${to}</div></div><div class="tot">…</div></div>`; list.appendChild(card);
-    const [total, ...per] = await Promise.all([get(code), ...days.map(d => get(code + '.' + d))]);
-    const max = Math.max(1, ...per), last7 = per.slice(-7).reduce((a, b) => a + b, 0), today = per[per.length - 1];
+  const cards = Object.entries(map).map(([code, to]) => {
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = `<div class="top"><div><div class="code">${code}</div><div class="to">→ ${to}</div></div><div class="tot">…</div></div>`;
+    list.appendChild(card); return [code, card];
+  });
+  for (const [code, card] of cards) {
+    const total = await get(code, false);
     card.querySelector('.tot').innerHTML = `${total} <small>naskenovaní</small>`;
-    card.insertAdjacentHTML('beforeend', `<div class="bars">${per.map((v, i) => `<i class="${v ? '' : 'z'}" style="height:${Math.max(3, v / max * 100)}%" title="${days[i]}: ${v}"></i>`).join('')}</div>
+    const per = [];
+    for (const d of days) per.push(await get(code + '.' + d, d < today));
+    const max = Math.max(1, ...per), sum = a => a.reduce((x, y) => x + y, 0);
+    card.insertAdjacentHTML('beforeend', `<div class="bars" style="grid-template-columns:repeat(${N},1fr)">${per.map((v, i) => `<i class="${v ? '' : 'z'}" style="height:${Math.max(3, v / max * 100)}%" title="${days[i]}: ${v}"></i>`).join('')}</div>
       <div class="ax"><span>${days[0].slice(5).split('-').reverse().join('.')}.</span><span>dnes</span></div>
-      <div class="row"><span>Dnes: <b>${today}</b></span><span>Posledných 7 dní: <b>${last7}</b></span><span>Posledných 30 dní: <b>${per.reduce((a, b) => a + b, 0)}</b></span><span><a href="qr/${code}.png" download>Stiahnuť QR</a></span></div>`);
+      <div class="row"><span>Dnes: <b>${per[N - 1]}</b></span><span>Posledných 7 dní: <b>${sum(per.slice(-7))}</b></span><span>Posledných ${N} dní: <b>${sum(per)}</b></span><span><a href="qr/${code}.png" download>Stiahnuť QR</a></span></div>`);
   }
 });
 </script>
